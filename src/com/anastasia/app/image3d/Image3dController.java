@@ -177,7 +177,7 @@ public class Image3dController implements Initializable {
         return polygons;
     }
 
-    // Поворот в плоскости oYZ вокруг oX
+    // Поворот в плоскости oYZ вокруг oX (вверх-вниз)
     private static Polygon[] rotatePolygonsYZ(Polygon[] polygons, double angle) {
         for (Polygon polygon : polygons) {
             for (Point3D point : polygon.points) {
@@ -197,6 +197,8 @@ public class Image3dController implements Initializable {
     }
 
     /**
+     * Из методички по проекциям
+     *
      * MAX_H = (-R .. R + R) = 3R
      * Экран -> x = [-1.5R, 1.5R], y = [0..MAX_H], z = 1.5R
      * Пользователь -> (0, MAX_H + DELTA_H, 3R] -> tg rotate -> DELTA_H / Y ( OR Y / DELTA_H)
@@ -224,6 +226,7 @@ public class Image3dController implements Initializable {
         return polygons;
     }
 
+    // сортируем многоугольники по сумме глубин - алгоритм художника (для закраски)
     private Polygon[] sortByDepth(Polygon[] polygons) {
         Arrays.sort(polygons, (a, b) -> {
             double aZSum = 0, bZSum = 0;
@@ -236,6 +239,7 @@ public class Image3dController implements Initializable {
         return polygons;
     }
 
+    // переводим все координаты из [xMin, xMax] -> [0..ширина экрана] (аналогично для y)
     private Polygon[] screenTransform(Polygon[] polygons) {
 
         double radius = RADIUS;
@@ -258,6 +262,8 @@ public class Image3dController implements Initializable {
             }
         }
 
+        // дополнительно добавляем, чтобы фигура не касалась крайними точками границ
+
         xMinScreen -= 0.5 * radius;
         xMaxScreen += 0.5 * radius;
 
@@ -269,6 +275,9 @@ public class Image3dController implements Initializable {
 
         for (Polygon polygon : polygons) {
             for (Point3D point : polygon.points) {
+                // на мониторе y идет сверху вниз, а в обычной жизни - снизу вверх
+                // х идет как обычно
+
                 point.x = ((point.x - xMinScreen) * coeffX);
                 point.y = ((yMaxScreen - point.y) * coeffY);
                 point.z = 0;

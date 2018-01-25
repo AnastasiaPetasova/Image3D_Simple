@@ -26,6 +26,24 @@ public class Image3dController implements Initializable {
     Button rotateDownButton;
 
     @FXML
+    Button moveLeftButton;
+
+    @FXML
+    Button moveRightButton;
+
+    @FXML
+    Button moveUpButton;
+
+    @FXML
+    Button moveDownButton;
+
+    @FXML
+    Button zoomDownButton;
+
+    @FXML
+    Button zoomUpButton;
+
+    @FXML
     CheckBox fillPolygonsCheckBox;
 
     private boolean fillPolygons;
@@ -33,8 +51,15 @@ public class Image3dController implements Initializable {
     private static final double RADIUS = 300;
     private static final int N_ALPHA = 30, N_BETA = 30;
 
-    private static final double DELTA_ROTATE_ANGLE = 15 * Math.PI / 180;
+    private static final double DELTA_ROTATE_ANGLE = 10 * Math.PI / 180;
     private double rotateAngle = 0;
+
+    // умножаем/делим на (1 + 0.05)
+    private static final double ZOOM_DELTA_MULTIPLIER = 0.05;
+    private double zoomCoeff = 1;
+
+    private static final double MOVE_DELTA = 100;
+    private Point moveShift = new Point(0, 0);
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -76,6 +101,8 @@ public class Image3dController implements Initializable {
 
     private void initButtons() {
         initRotateButtons();
+        initMoveButtons();
+        initZoomButtons();
     }
 
     private void rotateImage(double deltaRotateAngle){
@@ -90,6 +117,41 @@ public class Image3dController implements Initializable {
         rotateUpButton.setOnAction(event -> rotateImage(DELTA_ROTATE_ANGLE));
 
         rotateDownButton.setOnAction(event -> rotateImage(-DELTA_ROTATE_ANGLE));
+    }
+
+    private void initMoveButtons() {
+        moveLeftButton.setOnAction( event -> {
+            moveShift.x -= MOVE_DELTA;
+            drawImage();
+        });
+
+        moveRightButton.setOnAction( event -> {
+            moveShift.x += MOVE_DELTA;
+            drawImage();
+        });
+
+        // у Y знаки поменяны, так как на экране он сверху вниз
+        moveDownButton.setOnAction( event -> {
+            moveShift.y += MOVE_DELTA;
+            drawImage();
+        });
+
+        moveUpButton.setOnAction( event -> {
+            moveShift.y -= MOVE_DELTA;
+            drawImage();
+        });
+    }
+
+    private void initZoomButtons() {
+        zoomDownButton.setOnAction(event -> {
+            zoomCoeff /= (1 + ZOOM_DELTA_MULTIPLIER);
+            drawImage();
+        });
+
+        zoomUpButton.setOnAction(event -> {
+            zoomCoeff *= (1 + ZOOM_DELTA_MULTIPLIER);
+            drawImage();
+        });
     }
 
     private void drawImage() {
@@ -174,10 +236,13 @@ public class Image3dController implements Initializable {
         polygons = sortByDepth(polygons);
         polygons = screenTransform(polygons);
 
+        polygons = zoomTransform(polygons);
+        polygons = moveTransform(polygons);
+
         return polygons;
     }
 
-    // Поворот в плоскости oYZ вокруг oX (вверх-вниз)
+    // Поворот в плоскости oYZ вокруг oX
     private static Polygon[] rotatePolygonsYZ(Polygon[] polygons, double angle) {
         for (Polygon polygon : polygons) {
             for (Point3D point : polygon.points) {
@@ -197,8 +262,6 @@ public class Image3dController implements Initializable {
     }
 
     /**
-     * Из методички по проекциям
-     *
      * MAX_H = (-R .. R + R) = 3R
      * Экран -> x = [-1.5R, 1.5R], y = [0..MAX_H], z = 1.5R
      * Пользователь -> (0, MAX_H + DELTA_H, 3R] -> tg rotate -> DELTA_H / Y ( OR Y / DELTA_H)
@@ -226,7 +289,6 @@ public class Image3dController implements Initializable {
         return polygons;
     }
 
-    // сортируем многоугольники по сумме глубин - алгоритм художника (для закраски)
     private Polygon[] sortByDepth(Polygon[] polygons) {
         Arrays.sort(polygons, (a, b) -> {
             double aZSum = 0, bZSum = 0;
@@ -239,7 +301,6 @@ public class Image3dController implements Initializable {
         return polygons;
     }
 
-    // переводим все координаты из [xMin, xMax] -> [0..ширина экрана] (аналогично для y)
     private Polygon[] screenTransform(Polygon[] polygons) {
 
         double radius = RADIUS;
@@ -262,8 +323,6 @@ public class Image3dController implements Initializable {
             }
         }
 
-        // дополнительно добавляем, чтобы фигура не касалась крайними точками границ
-
         xMinScreen -= 0.5 * radius;
         xMaxScreen += 0.5 * radius;
 
@@ -275,12 +334,36 @@ public class Image3dController implements Initializable {
 
         for (Polygon polygon : polygons) {
             for (Point3D point : polygon.points) {
-                // на мониторе y идет сверху вниз, а в обычной жизни - снизу вверх
-                // х идет как обычно
-
                 point.x = ((point.x - xMinScreen) * coeffX);
                 point.y = ((yMaxScreen - point.y) * coeffY);
                 point.z = 0;
+            }
+        }
+
+        return polygons;
+    }
+
+    private Polygon[] zoomTransform(Polygon[] polygons) {
+        double centerX = imageCanvas.getWidth() / 2;
+        double centerY = imageCanvas.getHeight() / 2;
+
+        for (Polygon polygon : polygons) {
+            for (Point3D point : polygon.points) {
+                double oldX = point.x, oldY = point.y;
+
+                point.x = (oldX - centerX) * zoomCoeff + centerX;
+                point.y = (oldY - centerY) * zoomCoeff + centerY;
+            }
+        }
+
+        return polygons;
+    }
+
+    private Polygon[] moveTransform(Polygon[] polygons) {
+        for (Polygon polygon : polygons) {
+            for (Point3D point : polygon.points) {
+                point.x += moveShift.x;
+                point.y += moveShift.y;
             }
         }
 

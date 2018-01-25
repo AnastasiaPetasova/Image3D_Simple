@@ -9,8 +9,16 @@
 
     <HBox GridPane.rowIndex="1" spacing="20" alignment="CENTER_RIGHT">
 
-        <Button fx:id="rotateUpButton" text="Поворот вверх"/>
-        <Button fx:id="rotateDownButton" text="Поворот вниз"/>
+        <Button fx:id="moveLeftButton" text="Влево"/>
+        <Button fx:id="moveDownButton" text="Вниз"/>
+        <Button fx:id="moveUpButton" text="Вверх"/>
+        <Button fx:id="moveRightButton" text="Вправо"/>
+
+        <Button fx:id="rotateUpButton" text="Поворот вокруг OX (+)"/>
+        <Button fx:id="rotateDownButton" text="Поворот вокруг OX (-)"/>
+
+        <Button fx:id="zoomDownButton" text="-"/>
+        <Button fx:id="zoomUpButton" text="+"/>
 
         <CheckBox fx:id="fillPolygonsCheckBox" text="Закрашивать фигуру"/>
 

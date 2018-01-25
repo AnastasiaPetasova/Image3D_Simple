@@ -23,7 +23,7 @@ public class Image3dApplication extends Application {
 
     private void initScene(Stage primaryStage) throws IOException {
         Parent root = FXMLLoader.load(getClass().getResource("image3d_viewer.fxml"));
-        primaryStage.setTitle("Киндер-Сюрприз Петасовой");
+        primaryStage.setTitle("Киндер-Сюрприз");
 
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         primaryStage.setScene(

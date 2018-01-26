@@ -14,8 +14,12 @@
         <Button fx:id="moveUpButton" text="Вверх"/>
         <Button fx:id="moveRightButton" text="Вправо"/>
 
-        <Button fx:id="rotateUpButton" text="Поворот вокруг OX (+)"/>
-        <Button fx:id="rotateDownButton" text="Поворот вокруг OX (-)"/>
+        <RadioButton fx:id="yzRadioButton" text="Ось X"/>
+        <RadioButton fx:id="xzRadioButton" text="Ось Y"/>
+        <RadioButton fx:id="xyRadioButton" text="Ось Z"/>
+
+        <Button fx:id="rotateDownButton" text="Поворот -"/>
+        <Button fx:id="rotateUpButton" text="Поворот +"/>
 
         <Button fx:id="zoomDownButton" text="-"/>
         <Button fx:id="zoomUpButton" text="+"/>

@@ -6,6 +6,8 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.paint.Color;
 
 import java.awt.*;
@@ -18,6 +20,15 @@ import java.util.ResourceBundle;
 public class Image3dController implements Initializable {
     @FXML
     Canvas imageCanvas;
+
+    @FXML
+    RadioButton xyRadioButton;
+
+    @FXML
+    RadioButton xzRadioButton;
+
+    @FXML
+    RadioButton yzRadioButton;
 
     @FXML
     Button rotateUpButton;
@@ -46,13 +57,41 @@ public class Image3dController implements Initializable {
     @FXML
     CheckBox fillPolygonsCheckBox;
 
-    private boolean fillPolygons;
+    private static boolean NEED_USER_VIEW_TRANSFORM = false;
+    private static double RADIUS_COEFF = (NEED_USER_VIEW_TRANSFORM ? 0.5 : 0.3);
 
-    private static final double RADIUS = 300;
+    private boolean fillPolygons;
     private static final int N_ALPHA = 30, N_BETA = 30;
 
     private static final double DELTA_ROTATE_ANGLE = 10 * Math.PI / 180;
-    private double rotateAngle = 0;
+    private static final int XY = 0, XZ = 1, YZ = 2;
+
+    private static final int NEGATIVE = 0, POSITIVE = 1;
+    private static final AffineTransform[][] DELTA_ROTATE_TRANSFORMS;
+
+    static {
+        DELTA_ROTATE_TRANSFORMS = new AffineTransform[2][3];
+
+        int[] signs = { -1, 1 };
+
+        int[][] firstSeconds = {
+                { AffineTransforms.X, AffineTransforms.Y },
+                { AffineTransforms.X, AffineTransforms.Z },
+                { AffineTransforms.Y, AffineTransforms.Z }
+        };
+
+        for (int i = 0; i < signs.length; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                DELTA_ROTATE_TRANSFORMS[i][j] = AffineTransforms.rotate(
+                        signs[i] * DELTA_ROTATE_ANGLE,
+                        firstSeconds[j][0], firstSeconds[j][1]
+                        );
+            }
+        }
+    }
+
+    private int curAxis;
+    private AffineTransform rotate;
 
     // умножаем/делим на (1 + 0.05)
     private static final double ZOOM_DELTA_MULTIPLIER = 0.05;
@@ -64,6 +103,7 @@ public class Image3dController implements Initializable {
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         initCanvas();
+        initRadioButtons();
         initButtons();
         initCheckBox();
 
@@ -87,6 +127,14 @@ public class Image3dController implements Initializable {
         clearCanvas();
     }
 
+    private double calculateRadius() {
+        return Math.min(imageCanvas.getWidth(), imageCanvas.getHeight()) * RADIUS_COEFF;
+    }
+
+    private void initRadioButtons() {
+        initRotateRadioButtons();
+    }
+
     private void initCheckBox() {
         fillPolygons = true;
 
@@ -105,18 +153,32 @@ public class Image3dController implements Initializable {
         initZoomButtons();
     }
 
-    private void rotateImage(double deltaRotateAngle){
-        rotateAngle += deltaRotateAngle;
-        if (rotateAngle > 2 * Math.PI) rotateAngle -= 2 * Math.PI;
-        if (rotateAngle < 0) rotateAngle += 2 * Math.PI;
-
+    private void rotateImage(int direction){
+        rotate = rotate.append(DELTA_ROTATE_TRANSFORMS[direction][curAxis]);
         drawImage();
     }
 
-    private void initRotateButtons() {
-        rotateUpButton.setOnAction(event -> rotateImage(DELTA_ROTATE_ANGLE));
+    private void initRotateRadioButtons() {
+        ToggleGroup rotateGroup = new ToggleGroup();
 
-        rotateDownButton.setOnAction(event -> rotateImage(-DELTA_ROTATE_ANGLE));
+        RadioButton[] rotateRadioButtons = {
+                xyRadioButton, xzRadioButton, yzRadioButton
+        };
+
+        for (int axis = XY; axis <= YZ; ++axis) {
+            int finalAxis = axis;
+            rotateRadioButtons[axis].setToggleGroup(rotateGroup);
+            rotateRadioButtons[axis].setOnAction(event -> curAxis = finalAxis);
+        }
+
+        xyRadioButton.fire();
+    }
+
+    private void initRotateButtons() {
+        rotate = AffineTransforms.equal();
+
+        rotateUpButton.setOnAction(event -> rotateImage(POSITIVE));
+        rotateDownButton.setOnAction(event -> rotateImage(NEGATIVE));
     }
 
     private void initMoveButtons() {
@@ -155,7 +217,7 @@ public class Image3dController implements Initializable {
     }
 
     private void drawImage() {
-        Polygon[] polygons = generatePolygons(RADIUS, N_ALPHA, N_BETA);
+        Polygon[] polygons = generatePolygons(calculateRadius(), N_ALPHA, N_BETA);
         polygons = prepareToDraw(polygons);
         drawImage(polygons);
     }
@@ -226,12 +288,14 @@ public class Image3dController implements Initializable {
     }
 
     private Polygon[] prepareToDraw(Polygon[] polygons) {
-
         polygons = acsonometricTransform(polygons);
-        polygons = rotatePolygonsYZ(polygons, rotateAngle);
+
+        polygons = polygonsAffineTransform(polygons, rotate);
 
         // TODO если нужно преобразование на экран
-//        polygons = userViewTransform(polygons);
+        if (NEED_USER_VIEW_TRANSFORM) {
+            polygons = userViewTransform(polygons);
+        }
 
         polygons = sortByDepth(polygons);
         polygons = screenTransform(polygons);
@@ -242,14 +306,10 @@ public class Image3dController implements Initializable {
         return polygons;
     }
 
-    // Поворот в плоскости oYZ вокруг oX
-    private static Polygon[] rotatePolygonsYZ(Polygon[] polygons, double angle) {
+    private static Polygon[] polygonsAffineTransform(Polygon[] polygons, AffineTransform transform) {
         for (Polygon polygon : polygons) {
-            for (Point3D point : polygon.points) {
-                double oldY = point.y, oldZ = point.z;
-
-                point.y = oldY * Math.cos(angle) - oldZ * Math.sin(angle);
-                point.z = oldY * Math.sin(angle) + oldZ * Math.cos(angle);
+            for (int i = 0; i < polygon.points.length; ++i) {
+                polygon.points[i] = transform.process(polygon.points[i]);
             }
         }
 
@@ -258,7 +318,12 @@ public class Image3dController implements Initializable {
 
     private static Polygon[] acsonometricTransform(Polygon[] polygons) {
         // мы поворачиваем вокруг оси ОZ на 0 градусов, поэтому ничего не делаем
-        return rotatePolygonsYZ(polygons, Math.PI / 2);
+        AffineTransform transform = AffineTransforms.chain(
+                AffineTransforms.rotate(0, AffineTransforms.X, AffineTransforms.Y),
+                AffineTransforms.rotate(Math.PI / 2, AffineTransforms.Y, AffineTransforms.Z)
+        );
+
+        return polygonsAffineTransform(polygons, transform);
     }
 
     /**
@@ -271,7 +336,7 @@ public class Image3dController implements Initializable {
      * double z = zPoints[j] - zScreen;
      */
     private Polygon[] userViewTransform(Polygon[] polygons) {
-        double radius = RADIUS;
+        double radius = calculateRadius();
 
         double zUser = 3 * radius;
         double zScreen = 1.5 * radius;
@@ -302,71 +367,28 @@ public class Image3dController implements Initializable {
     }
 
     private Polygon[] screenTransform(Polygon[] polygons) {
+        double centerX = imageCanvas.getWidth() / 2;
+        double centerY = imageCanvas.getHeight() / 2;
 
-        double radius = RADIUS;
-
-        double xMinScreen = Integer.MAX_VALUE;
-        double xMaxScreen = Integer.MIN_VALUE;
-
-        double yMinScreen = Integer.MAX_VALUE;
-        double yMaxScreen = Integer.MIN_VALUE;
-
-        for (Polygon polygon : polygons) {
-            for (double x : polygon.xPoints()) {
-                xMinScreen = Math.min(xMinScreen, x);
-                xMaxScreen = Math.max(xMaxScreen, x);
-            }
-
-            for (double y : polygon.yPoints()) {
-                yMinScreen = Math.min(yMinScreen, y);
-                yMaxScreen = Math.max(yMaxScreen, y);
-            }
-        }
-
-        xMinScreen -= 0.5 * radius;
-        xMaxScreen += 0.5 * radius;
-
-        yMinScreen -= 0.1 * radius;
-        yMaxScreen += 0.1 * radius;
-
-        double coeffX = imageCanvas.getWidth() / (xMaxScreen - xMinScreen);
-        double coeffY = imageCanvas.getHeight() / (yMaxScreen - yMinScreen);
-
-        for (Polygon polygon : polygons) {
-            for (Point3D point : polygon.points) {
-                point.x = ((point.x - xMinScreen) * coeffX);
-                point.y = ((yMaxScreen - point.y) * coeffY);
-                point.z = 0;
-            }
-        }
-
-        return polygons;
+        AffineTransform screenTransform = AffineTransforms.shift(centerX, centerY, 0);
+        return polygonsAffineTransform(polygons, screenTransform);
     }
 
     private Polygon[] zoomTransform(Polygon[] polygons) {
         double centerX = imageCanvas.getWidth() / 2;
         double centerY = imageCanvas.getHeight() / 2;
 
-        for (Polygon polygon : polygons) {
-            for (Point3D point : polygon.points) {
-                double oldX = point.x, oldY = point.y;
+        AffineTransform zoom = AffineTransforms.chain(
+                AffineTransforms.shift(-centerX, -centerY, 0),
+                AffineTransforms.zoom(zoomCoeff, zoomCoeff, zoomCoeff),
+                AffineTransforms.shift(centerX, centerY, 0)
+        );
 
-                point.x = (oldX - centerX) * zoomCoeff + centerX;
-                point.y = (oldY - centerY) * zoomCoeff + centerY;
-            }
-        }
-
-        return polygons;
+        return polygonsAffineTransform(polygons, zoom);
     }
 
     private Polygon[] moveTransform(Polygon[] polygons) {
-        for (Polygon polygon : polygons) {
-            for (Point3D point : polygon.points) {
-                point.x += moveShift.x;
-                point.y += moveShift.y;
-            }
-        }
-
-        return polygons;
+        AffineTransform move = AffineTransforms.shift(moveShift.x, moveShift.y, 0);
+        return polygonsAffineTransform(polygons, move);
     }
 }

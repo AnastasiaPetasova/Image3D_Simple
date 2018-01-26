@@ -37,10 +37,10 @@ public class AffineTransforms {
         }
         double[][] matrix = equalMatrix();
 
-        matrix[first][first] *= Math.cos(angle);
-        matrix[first][second] *= -Math.sin(angle);
-        matrix[second][first] *= Math.sin(angle);
-        matrix[second][second] *= Math.cos(angle);
+        matrix[first][first] = Math.cos(angle);
+        matrix[first][second] = -Math.sin(angle);
+        matrix[second][first] = Math.sin(angle);
+        matrix[second][second] = Math.cos(angle);
 
         return new AffineTransform(matrix);
     }
